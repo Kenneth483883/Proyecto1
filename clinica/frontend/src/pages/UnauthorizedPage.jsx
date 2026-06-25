@@ -1,18 +1,29 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+
+const MESSAGES = {
+    admin: {
+        title: 'Sección exclusiva para administradores',
+        body: 'Solo los administradores tienen acceso a esta sección. Si creés que esto es un error, contactá al administrador del sistema.',
+    },
+    vet: {
+        title: 'Sección exclusiva para veterinarios',
+        body: 'Esta sección está disponible únicamente para veterinarios y administradores.',
+    },
+}
+
+const DEFAULT_MESSAGE = {
+    title: 'Acceso denegado',
+    body: 'No tenés permisos para acceder a esta sección.',
+}
 
 export default function UnauthorizedPage() {
     const navigate = useNavigate()
     const { logout } = useAuth()
+    const [searchParams] = useSearchParams()
 
-    const handleGoBack = () => {
-        navigate('/dashboard')
-    }
-
-    const handleLogout = () => {
-        logout()
-        navigate('/login')
-    }
+    const role = searchParams.get('role')
+    const { title, body } = MESSAGES[role] ?? DEFAULT_MESSAGE
 
     return (
         <div style={{
@@ -29,17 +40,18 @@ export default function UnauthorizedPage() {
                 borderRadius: '12px',
                 textAlign: 'center',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                maxWidth: '400px'
+                maxWidth: '420px'
             }}>
                 <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🚫</div>
-                <h1 style={{ color: '#dc3545', marginBottom: '0.5rem' }}>Acceso Denegado</h1>
-                <p style={{ color: '#6c757d', marginBottom: '2rem' }}>
-                    No tenés permisos para acceder a esta sección.
-                    Solo los administradores pueden realizar esta acción.
+                <h1 style={{ color: '#dc3545', marginBottom: '0.5rem', fontSize: '1.4rem' }}>
+                    {title}
+                </h1>
+                <p style={{ color: '#6c757d', marginBottom: '2rem', lineHeight: '1.5' }}>
+                    {body}
                 </p>
                 <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                     <button
-                        onClick={handleGoBack}
+                        onClick={() => navigate('/dashboard')}
                         style={{
                             padding: '10px 24px',
                             backgroundColor: '#2d6a4f',
@@ -53,7 +65,7 @@ export default function UnauthorizedPage() {
                         Volver al inicio
                     </button>
                     <button
-                        onClick={handleLogout}
+                        onClick={() => { logout(); navigate('/login') }}
                         style={{
                             padding: '10px 24px',
                             backgroundColor: '#dc3545',

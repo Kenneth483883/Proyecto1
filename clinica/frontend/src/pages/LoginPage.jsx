@@ -69,14 +69,6 @@ export default function LoginPage() {
                     >
                         {loading ? 'Ingresando...' : 'Iniciar sesión'}
                     </button>
-
-                    <button
-                        className="btn btn-primary login-btn"
-                        type="submit"
-                        disabled={loading}
-                    >
-                        {loading ? 'Ingresando...' : 'Registrarse'}
-                    </button>
                 </form>
 
             </div>

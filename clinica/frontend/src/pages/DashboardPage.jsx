@@ -2,7 +2,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function DashboardPage() {
-    const { user, logout, isAdmin } = useAuth()
+    const { user, logout, isAdmin, isVeterinario } = useAuth()
+
+    const roleLabel = isAdmin() ? 'Administrador' : isVeterinario() ? 'Veterinario' : 'Usuario'
     const navigate = useNavigate()
 
     const handleLogout = () => {
@@ -31,7 +33,7 @@ export default function DashboardPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                     <span style={{ color: '#a8d5b5', fontSize: '0.9rem' }}>
-                        {user?.username} — {user?.role === 'ROLE_ADMIN' ? 'Administrador' : 'Usuario'}
+                        {user?.username} — {roleLabel}
                     </span>
                     <button
                         onClick={handleLogout}
@@ -55,9 +57,6 @@ export default function DashboardPage() {
                 <h2 style={{ color: '#2d6a4f', marginBottom: '0.5rem' }}>
                     Bienvenido, {user?.username}
                 </h2>
-                <p style={{ color: '#6c757d', marginBottom: '2rem' }}>
-                    {isAdmin() ? 'Tenés acceso completo al sistema.' : 'Tenés acceso de solo lectura.'}
-                </p>
 
                 {/* Tarjetas de módulos */}
                 <div style={{
@@ -70,6 +69,7 @@ export default function DashboardPage() {
                         { nombre: 'Mascotas', icono: '🐶', ruta: '/mascotas' },
                         { nombre: 'Veterinarios', icono: '👨‍⚕️', ruta: '/veterinarios' },
                         { nombre: 'Consultas', icono: '📋', ruta: '/consultas' },
+                        { nombre: 'Prescripciones', icono: '💉', ruta: '/prescripciones' },
                         { nombre: 'Especies', icono: '🦎', ruta: '/especies' },
                         { nombre: 'Medicamentos', icono: '💊', ruta: '/medicamentos' },
                     ].map((modulo) => (

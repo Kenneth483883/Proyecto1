@@ -6,7 +6,7 @@ export default function AdminRoute({ children }) {
 
     if (loading) return <div style={{padding: 40, textAlign: "center"}}>Cargando...</div>
     if (!user) return <Navigate to="/login" replace />
-    if (!isAdmin()) return <Navigate to="/unauthorized" replace />
+    if (!isAdmin()) return <Navigate to="/unauthorized?role=admin" replace />
 
     return children
 }

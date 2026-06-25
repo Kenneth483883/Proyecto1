@@ -3,16 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axiosConfig'
 
-const EMPTY_FORM = { fechaConsulta: '', motivo: '', diagnostico: '', mascotaId: '', veterinarioId: '' }
+const EMPTY_FORM = { consultaId: '', medicamentoId: '', dosis: '', duracionDias: '' }
 
-export default function ConsultasPage() {
+export default function PrescripcionesPage() {
+    const [prescripciones, setPrescripciones] = useState([])
     const [consultas, setConsultas] = useState([])
-    const [mascotas, setMascotas] = useState([])
-    const [veterinarios, setVeterinarios] = useState([])
+    const [medicamentos, setMedicamentos] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const [busqueda, setBusqueda] = useState('')
     const [mostrarFormulario, setMostrarFormulario] = useState(false)
+    // editando stores the original {consultaId, medicamentoId} key so we can DELETE the old record
     const [editando, setEditando] = useState(null)
     const [form, setForm] = useState(EMPTY_FORM)
     const [guardando, setGuardando] = useState(false)
@@ -23,18 +24,17 @@ export default function ConsultasPage() {
 
     const cargarTodo = async () => {
         try {
-            const consultasRes = await api.get('/api/v1/consultas')
+            const [prescripcionesRes, consultasRes] = await Promise.all([
+                api.get('/api/v1/consulta-medicamentos'),
+                api.get('/api/v1/consultas'),
+            ])
+            setPrescripciones(prescripcionesRes.data)
             setConsultas(consultasRes.data)
 
-            // Mascotas and veterinarios are only needed to populate the form,
-            // which is only shown to admins and vets — skip for ROLE_USER
+            // Medicamentos only needed to populate the form — skip for ROLE_USER
             if (isAdmin() || isVeterinario()) {
-                const [mascotasRes, veterinariosRes] = await Promise.all([
-                    api.get('/api/v1/mascotas'),
-                    api.get('/api/v1/veterinarios'),
-                ])
-                setMascotas(mascotasRes.data)
-                setVeterinarios(veterinariosRes.data)
+                const medicamentosRes = await api.get('/api/v1/medicamentos')
+                setMedicamentos(medicamentosRes.data)
             }
         } catch {
             setError('Error al cargar los datos')
@@ -43,21 +43,39 @@ export default function ConsultasPage() {
         }
     }
 
+    // Enrich each prescription with its consulta's details for display
+    const enriquecer = (p) => {
+        const consulta = consultas.find(c => c.id === p.consultaId)
+        return {
+            ...p,
+            mascotaNombre: consulta?.mascotaNombre ?? '—',
+            fechaConsulta: consulta?.fechaConsulta ?? '—',
+            veterinarioNombre: consulta?.veterinarioNombre ?? '—',
+        }
+    }
+
+    const prescripcionesFiltradas = prescripciones
+        .map(enriquecer)
+        .filter(p =>
+            p.medicamentoNombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
+            p.mascotaNombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
+            p.dosis?.toLowerCase().includes(busqueda.toLowerCase())
+        )
+
     const abrirNuevo = () => {
         setForm(EMPTY_FORM)
         setEditando(null)
         setMostrarFormulario(true)
     }
 
-    const abrirEditar = (c) => {
+    const abrirEditar = (p) => {
+        setEditando({ consultaId: p.consultaId, medicamentoId: p.medicamentoId })
         setForm({
-            fechaConsulta: c.fechaConsulta || '',
-            motivo: c.motivo || '',
-            diagnostico: c.diagnostico || '',
-            mascotaId: c.mascotaId || '',
-            veterinarioId: c.veterinarioId || '',
+            consultaId: p.consultaId,
+            medicamentoId: p.medicamentoId,
+            dosis: p.dosis || '',
+            duracionDias: p.duracionDias || '',
         })
-        setEditando(c.id)
         setMostrarFormulario(true)
     }
 
@@ -68,46 +86,47 @@ export default function ConsultasPage() {
     }
 
     const guardar = async () => {
-        if (!form.fechaConsulta) { alert('La fecha es obligatoria.'); return }
-        if (!form.motivo.trim()) { alert('El motivo es obligatorio.'); return }
-        if (!form.mascotaId) { alert('Debe seleccionar una mascota.'); return }
-        if (!form.veterinarioId) { alert('Debe seleccionar un veterinario.'); return }
+        if (!form.consultaId) { alert('Debe seleccionar una consulta.'); return }
+        if (!form.medicamentoId) { alert('Debe seleccionar un medicamento.'); return }
+        if (!form.dosis.trim()) { alert('La dosis es obligatoria.'); return }
+        if (!form.duracionDias || Number(form.duracionDias) < 1) {
+            alert('La duración debe ser al menos 1 día.'); return
+        }
         setGuardando(true)
         try {
-            const payload = {
-                ...form,
-                mascotaId: Number(form.mascotaId),
-                veterinarioId: Number(form.veterinarioId),
-            }
+            // Editing has no PUT endpoint — delete the old record, then create the new one
             if (editando) {
-                await api.put(`/api/v1/consultas/${editando}`, payload)
-            } else {
-                await api.post('/api/v1/consultas', payload)
+                await api.delete(
+                    `/api/v1/consulta-medicamentos/${editando.consultaId}/${editando.medicamentoId}`
+                )
             }
+            await api.post('/api/v1/consulta-medicamentos', {
+                consultaId: Number(form.consultaId),
+                medicamentoId: Number(form.medicamentoId),
+                dosis: form.dosis,
+                duracionDias: Number(form.duracionDias),
+            })
             cancelar()
             cargarTodo()
         } catch {
-            alert('Error al guardar la consulta.')
+            alert('Error al guardar la prescripción.')
         } finally {
             setGuardando(false)
         }
     }
 
-    const eliminar = async (id) => {
-        if (!window.confirm('¿Eliminar esta consulta?')) return
+    const eliminar = async (consultaId, medicamentoId) => {
+        if (!window.confirm('¿Eliminar esta prescripción?')) return
         try {
-            await api.delete(`/api/v1/consultas/${id}`)
+            await api.delete(`/api/v1/consulta-medicamentos/${consultaId}/${medicamentoId}`)
             cargarTodo()
         } catch {
             alert('Error al eliminar')
         }
     }
 
-    const consultasFiltradas = consultas.filter(c =>
-        c.mascotaNombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
-        c.veterinarioNombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
-        c.motivo?.toLowerCase().includes(busqueda.toLowerCase())
-    )
+    const consultaLabel = (c) =>
+        `#${c.id} — ${c.mascotaNombre ?? '?'} (${c.fechaConsulta ?? '?'})`
 
     const handleLogout = () => { logout(); navigate('/login') }
 
@@ -121,18 +140,17 @@ export default function ConsultasPage() {
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <button onClick={() => navigate('/dashboard')} style={btnNav}>Dashboard</button>
-                    <button onClick={() => navigate('/propietarios')} style={btnNav}>Propietarios</button>
+                    <button onClick={() => navigate('/consultas')} style={btnNav}>Consultas</button>
                     <button onClick={() => navigate('/mascotas')} style={btnNav}>Mascotas</button>
-                    <button onClick={() => navigate('/veterinarios')} style={btnNav}>Veterinarios</button>
                     <button onClick={handleLogout} style={{ ...btnNav, backgroundColor: '#dc3545' }}>Cerrar sesión</button>
                 </div>
             </nav>
 
             <div style={{ padding: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                    <h2 style={{ color: '#2d6a4f', margin: 0 }}>🩺 Consultas</h2>
+                    <h2 style={{ color: '#2d6a4f', margin: 0 }}>💉 Prescripciones</h2>
                     {(isAdmin() || isVeterinario()) && (
-                        <button onClick={abrirNuevo} style={btnPrimary}>+ Nueva consulta</button>
+                        <button onClick={abrirNuevo} style={btnPrimary}>+ Nueva prescripción</button>
                     )}
                 </div>
 
@@ -140,65 +158,67 @@ export default function ConsultasPage() {
                 {mostrarFormulario && (
                     <div style={formCard}>
                         <h3 style={{ color: '#2d6a4f', marginTop: 0, marginBottom: '1.25rem' }}>
-                            {editando ? 'Editar consulta' : 'Nueva consulta'}
+                            {editando ? 'Editar prescripción' : 'Nueva prescripción'}
                         </h3>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
                             <div>
-                                <label style={labelStyle}>Fecha *</label>
+                                <label style={labelStyle}>Consulta *</label>
+                                <select
+                                    value={form.consultaId}
+                                    onChange={e => setForm({ ...form, consultaId: e.target.value })}
+                                    style={inputStyle}
+                                    disabled={!!editando}
+                                >
+                                    <option value="">-- Seleccionar consulta --</option>
+                                    {consultas.map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {consultaLabel(c)}
+                                        </option>
+                                    ))}
+                                </select>
+                                {editando && (
+                                    <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#6c757d' }}>
+                                        No se puede cambiar la consulta al editar
+                                    </p>
+                                )}
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Medicamento *</label>
+                                <select
+                                    value={form.medicamentoId}
+                                    onChange={e => setForm({ ...form, medicamentoId: e.target.value })}
+                                    style={inputStyle}
+                                    disabled={!!editando}
+                                >
+                                    <option value="">-- Seleccionar medicamento --</option>
+                                    {medicamentos.map(m => (
+                                        <option key={m.id} value={m.id}>{m.nombre}</option>
+                                    ))}
+                                </select>
+                                {editando && (
+                                    <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#6c757d' }}>
+                                        No se puede cambiar el medicamento al editar
+                                    </p>
+                                )}
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Dosis *</label>
                                 <input
-                                    type="date"
-                                    value={form.fechaConsulta}
-                                    onChange={e => setForm({ ...form, fechaConsulta: e.target.value })}
+                                    value={form.dosis}
+                                    onChange={e => setForm({ ...form, dosis: e.target.value })}
+                                    placeholder="Ej. 500mg cada 8h"
                                     style={inputStyle}
                                 />
                             </div>
                             <div>
-                                <label style={labelStyle}>Mascota *</label>
-                                <select
-                                    value={form.mascotaId}
-                                    onChange={e => setForm({ ...form, mascotaId: e.target.value })}
-                                    style={inputStyle}
-                                >
-                                    <option value="">-- Seleccionar mascota --</option>
-                                    {mascotas.map(m => (
-                                        <option key={m.id} value={m.id}>
-                                            {m.nombre} ({m.propietarioNombre})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Veterinario *</label>
-                                <select
-                                    value={form.veterinarioId}
-                                    onChange={e => setForm({ ...form, veterinarioId: e.target.value })}
-                                    style={inputStyle}
-                                >
-                                    <option value="">-- Seleccionar veterinario --</option>
-                                    {veterinarios.map(v => (
-                                        <option key={v.id} value={v.id}>
-                                            {v.nombre} {v.primerApellido}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Motivo *</label>
+                                <label style={labelStyle}>Duración (días) *</label>
                                 <input
-                                    value={form.motivo}
-                                    onChange={e => setForm({ ...form, motivo: e.target.value })}
-                                    placeholder="Motivo de la consulta"
+                                    type="number"
+                                    min="1"
+                                    value={form.duracionDias}
+                                    onChange={e => setForm({ ...form, duracionDias: e.target.value })}
+                                    placeholder="Ej. 7"
                                     style={inputStyle}
-                                />
-                            </div>
-                            <div style={{ gridColumn: 'span 2' }}>
-                                <label style={labelStyle}>Diagnóstico</label>
-                                <textarea
-                                    value={form.diagnostico}
-                                    onChange={e => setForm({ ...form, diagnostico: e.target.value })}
-                                    placeholder="Diagnóstico (opcional)"
-                                    rows={3}
-                                    style={{ ...inputStyle, resize: 'vertical' }}
                                 />
                             </div>
                         </div>
@@ -212,7 +232,7 @@ export default function ConsultasPage() {
                 )}
 
                 <input
-                    placeholder="Buscar por mascota, veterinario o motivo..."
+                    placeholder="Buscar por medicamento, mascota o dosis..."
                     value={busqueda}
                     onChange={e => setBusqueda(e.target.value)}
                     style={searchStyle}
@@ -225,30 +245,36 @@ export default function ConsultasPage() {
                     <table style={tableStyle}>
                         <thead>
                         <tr style={{ backgroundColor: '#2d6a4f', color: 'white' }}>
-                            <th style={th}>ID</th>
-                            <th style={th}>Fecha</th>
+                            <th style={th}>Consulta</th>
                             <th style={th}>Mascota</th>
                             <th style={th}>Veterinario</th>
-                            <th style={th}>Motivo</th>
-                            <th style={th}>Diagnóstico</th>
+                            <th style={th}>Medicamento</th>
+                            <th style={th}>Dosis</th>
+                            <th style={th}>Duración</th>
                             {(isAdmin() || isVeterinario()) && <th style={th}>Acciones</th>}
                         </tr>
                         </thead>
                         <tbody>
-                        {consultasFiltradas.map((c, i) => (
-                            <tr key={c.id} style={{ backgroundColor: i % 2 === 0 ? 'white' : '#f8f9fa' }}>
-                                <td style={td}>{c.id}</td>
-                                <td style={td}>{c.fechaConsulta}</td>
-                                <td style={td}>{c.mascotaNombre}</td>
-                                <td style={td}>{c.veterinarioNombre}</td>
-                                <td style={td}>{c.motivo}</td>
-                                <td style={td}>{c.diagnostico || '—'}</td>
+                        {prescripcionesFiltradas.map((p, i) => (
+                            <tr key={`${p.consultaId}-${p.medicamentoId}`}
+                                style={{ backgroundColor: i % 2 === 0 ? 'white' : '#f8f9fa' }}>
+                                <td style={td}>#{p.consultaId} · {p.fechaConsulta}</td>
+                                <td style={td}>{p.mascotaNombre}</td>
+                                <td style={td}>{p.veterinarioNombre}</td>
+                                <td style={td}>{p.medicamentoNombre}</td>
+                                <td style={td}>{p.dosis}</td>
+                                <td style={td}>{p.duracionDias} día{p.duracionDias !== 1 ? 's' : ''}</td>
                                 {(isAdmin() || isVeterinario()) && (
                                     <td style={td}>
                                         <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button onClick={() => abrirEditar(c)} style={btnEdit}>Editar</button>
+                                            <button onClick={() => abrirEditar(p)} style={btnEdit}>Editar</button>
                                             {isAdmin() && (
-                                                <button onClick={() => eliminar(c.id)} style={btnDelete}>Eliminar</button>
+                                                <button
+                                                    onClick={() => eliminar(p.consultaId, p.medicamentoId)}
+                                                    style={btnDelete}
+                                                >
+                                                    Eliminar
+                                                </button>
                                             )}
                                         </div>
                                     </td>
@@ -257,9 +283,9 @@ export default function ConsultasPage() {
                         ))}
                         </tbody>
                     </table>
-                    {consultasFiltradas.length === 0 && !loading && (
+                    {prescripcionesFiltradas.length === 0 && !loading && (
                         <p style={{ textAlign: 'center', color: '#6c757d', marginTop: '2rem' }}>
-                            No se encontraron consultas
+                            No se encontraron prescripciones
                         </p>
                     )}
                 </div>

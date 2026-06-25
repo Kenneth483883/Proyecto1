@@ -44,8 +44,11 @@ public class SecurityConfig {
                         // Rutas públicas
                         .requestMatchers("/auth/**").permitAll()
 
-                        // Solo ADMIN puede gestionar veterinarios y medicamentos
+                        // Vets can read medicamentos and veterinarios (needed for form dropdowns)
+                        // but only admins can write to those endpoints
+                        .requestMatchers(HttpMethod.GET, "/api/v1/veterinarios/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_VETERINARIO")
                         .requestMatchers("/api/v1/veterinarios/**").hasAnyAuthority("ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/medicamentos/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_VETERINARIO")
                         .requestMatchers("/api/v1/medicamentos/**").hasAnyAuthority("ROLE_ADMIN")
 
                         // ADMIN y VETERINARIO pueden crear y editar
